@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://triplehai.com/Lagerstroemia/sitemap.xml
