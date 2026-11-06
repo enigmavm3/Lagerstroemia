@@ -1,0 +1,42 @@
+name: IndexNow
+# docs/ 底下有新增或更新的 HTML 被推上 main 時，通知 IndexNow（Bing／Yahoo 等）。
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**/*.html"]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Submit changed URLs
+        run: |
+          python3 - <<'PY'
+          import glob, json, os, re, subprocess, urllib.request
+          base = "https://triplehai.com/Lagerstroemia/"
+          keys = [p for p in glob.glob("docs/*.txt") if re.fullmatch(r"[0-9a-f]{32}", os.path.basename(p)[:-4])]
+          if not keys:
+              raise SystemExit("no IndexNow key file")
+          key = os.path.basename(keys[0])[:-4]
+          try:
+              changed = subprocess.check_output(["git", "diff", "--name-only", "--diff-filter=AM", "HEAD~1", "HEAD", "--", "docs"], text=True).split()
+          except subprocess.CalledProcessError:
+              changed = []
+          urls = []
+          for f in changed:
+              if not f.endswith(".html") or f.endswith("404.html"):
+                  continue
+              rel = f[len("docs/"):]
+              rel = rel[: -len("index.html")] if rel.endswith("index.html") else rel
+              urls.append(base + rel)
+          print("URLs:", json.dumps(urls, ensure_ascii=False))
+          if not urls:
+              raise SystemExit(0)
+          body = json.dumps({"host": "triplehai.com", "key": key, "keyLocation": base + key + ".txt", "urlList": urls}).encode()
+          req = urllib.request.Request("https://api.indexnow.org/indexnow", data=body, headers={"Content-Type": "application/json; charset=utf-8"})
+          with urllib.request.urlopen(req, timeout=30) as r:
+              print("IndexNow status:", r.status)
+          PY
